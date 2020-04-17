@@ -29,7 +29,7 @@ Searching for real-time searches
 
 
 show all apps and current status
-/SPLUNK_HOME/bin/splunk display app 
+/SPLUNK_HOME/bin/splunk display app
 
 
 tcpout thruput max and average search query
@@ -59,12 +59,12 @@ index=_internal source = *scheduler.log status=skipped | stats count by user app
 
 https://answers.splunk.com/answers/327033/how-to-create-an-alert-for-a-forwarder-that-hasnt.html
 
- index=_internal sourcetype=splunkd group=tcpin_connections NOT eventType=* 
+ index=_internal sourcetype=splunkd group=tcpin_connections NOT eventType=*
  | stats
  max(_time) as last_connected,
  sum(kb) as sum_kb by guid, hostname
  | addinfo
- | eval status = if(isnull(sum_kb) or (sum_kb <= 0) or (last_connected < (info_max_time - 900)), "missing", "active") 
+ | eval status = if(isnull(sum_kb) or (sum_kb <= 0) or (last_connected < (info_max_time - 900)), "missing", "active")
  | where status="missing"
 
 
@@ -96,10 +96,10 @@ alternatively
 
 One member indexer cluster
 
-1. Make sure all the _*indexes are defined within the master apps. 
-2. Create small change on the master to create a new bundle. 
-3. Verify the CM is running. 
-4. Verify indexers are running; issue CLI fsck command to join the cluster. 
+1. Make sure all the _*indexes are defined within the master apps.
+2. Create small change on the master to create a new bundle.
+3. Verify the CM is running.
+4. Verify indexers are running; issue CLI fsck command to join the cluster.
 5. Once completed please upload a diag of each instance if the work around does not resolve the issue.
 
 
@@ -140,15 +140,15 @@ CLI:
 Forwarder Diagnostics – Last time Data Was Received by Index and Sourcetype
 
 
-| tstats latest(_time) as Latest by host sourcetype index 
-| eval current=now() 
-| eval Minimum_Age=round(((current-Latest)/60)/60,2) 
+| tstats latest(_time) as Latest by host sourcetype index
+| eval current=now()
+| eval Minimum_Age=round(((current-Latest)/60)/60,2)
 | rangemap field=Minimum_Age default=Critical Normal=0-0.5 Elevated=0.5-2 Warning=2-4
 | eval stIDX=tostring(index) + " -- " + tostring(sourcetype)
 | stats values(stIDX) as "Index -- Sourcetype" list(Latest) as "Latest Event" list(Minimum_Age) as Minimum_Age list(range) as Threshold by host bloc
-| convert ctime("Latest Event") 
-| eventstats avg(Minimum_Age) as average by host 
-| eval average=round(average,2) 
+| convert ctime("Latest Event")
+| eventstats avg(Minimum_Age) as average by host
+| eval average=round(average,2)
 | sort - average
 | rename Minimum_Age as "Hours Since Last Communication" average as "Average Time in Hours Since Last Communication"
 
@@ -185,7 +185,7 @@ grep -i <search term> log.cfg
 
 Bonnie test parameters
 
-$ bonnie++ -d [/your volume] -s [twice your system RAM in MB] -u root:root -qfb 
+$ bonnie++ -d [/your volume] -s [twice your system RAM in MB] -u root:root -qfb
 
 
 Latency between indexed time and actual time
@@ -195,24 +195,24 @@ index=_internal sourcetype=splunkd | eval latency=_indextime - _time | stats avg
 
 bucket count grep across cluster
 
-echo "$(( `/opt/splunk/bin/splunk show cluster-status | grep Bucket\ Count | cut -d= -f2 | tr '\n' '+'` 0))" 
+echo "$(( `/opt/splunk/bin/splunk show cluster-status | grep Bucket\ Count | cut -d= -f2 | tr '\n' '+'` 0))"
 
 
-Started, Skipped, Deferred searched (Bar Chart, Stacked): 
+Started, Skipped, Deferred searched (Bar Chart, Stacked):
 
-index=_internal host="hostname" source=*metrics.log group=searchscheduler 
-| timechart partial=false sum(dispatched) AS Started, sum(skipped) AS Skipped 
-| appendcols [search index=_internal host="hostname" sourcetype=scheduler status=continued 
-| eval savedsearch_id_scheduled_time=savedsearch_id."-".scheduled_time 
-| timechart dc(savedsearch_id_scheduled_time) AS Deferred] 
+index=_internal host="hostname" source=*metrics.log group=searchscheduler
+| timechart partial=false sum(dispatched) AS Started, sum(skipped) AS Skipped
+| appendcols [search index=_internal host="hostname" sourcetype=scheduler status=continued
+| eval savedsearch_id_scheduled_time=savedsearch_id."-".scheduled_time
+| timechart dc(savedsearch_id_scheduled_time) AS Deferred]
 
 
-Scheduled search errors: 
-index=_internal host="hostname" source=*scheduler.log log_level=ERROR OR log_level=WARN 
-| cluster showcount=t 
-| table cluster_count, message, savedsearch_name 
-| sort - cluster_count 
-| rename cluster_count AS count message AS "Error Message" savedsearch_name AS "Scheduled search name" 
+Scheduled search errors:
+index=_internal host="hostname" source=*scheduler.log log_level=ERROR OR log_level=WARN
+| cluster showcount=t
+| table cluster_count, message, savedsearch_name
+| sort - cluster_count
+| rename cluster_count AS count message AS "Error Message" savedsearch_name AS "Scheduled search name"
 
 
 
@@ -263,15 +263,15 @@ loginCustomBackgroundImage = <pathToMyFile or myApp:pathToMyFile>
 
 Identifying DMA issues
 
-Per the webex, we identified that the datamodels were summarizing data for a longer period of time than necessary, causing a much higher load on the indexers. Additionally, we tuned the datamodels to only query the necessary indexes rather than having a more broad search. 
+Per the webex, we identified that the datamodels were summarizing data for a longer period of time than necessary, causing a much higher load on the indexers. Additionally, we tuned the datamodels to only query the necessary indexes rather than having a more broad search.
 
-The following tstats that we ran, identifies the sourcetypes and indexes that the datamodel has matched against. This is how we identified which indexes we wanted to refine down to in the actual datamodel query. 
+The following tstats that we ran, identifies the sourcetypes and indexes that the datamodel has matched against. This is how we identified which indexes we wanted to refine down to in the actual datamodel query.
 
-|tstats summariesonly=t count values(sourcetype) from datamodel=<modelname> by index 
+|tstats summariesonly=t count values(sourcetype) from datamodel=<modelname> by index
 
-The following REST search shows what the actual query for the datamodel is and ensures that the change that was made has taken effect. 
+The following REST search shows what the actual query for the datamodel is and ensures that the change that was made has taken effect.
 
-|rest /services/datamodel/acceleration | fields title search 
+|rest /services/datamodel/acceleration | fields title search
 
 
 
@@ -279,7 +279,7 @@ The following REST search shows what the actual query for the datamodel is and e
 Check for any app with a datamodel acceleration and give size on disk of summary data
 
 |rest servicesNS/-/-/data/models
-| search acceleration="1" 
+| search acceleration="1"
 | table title eai:appName eai:userName
 | rename eai:appName AS name| eval myDatamodel="DM_" . name . "_" . title
 |map search="|rest /servicesNS/nobody/-/admin/summarization/tstats:$myDatamodel$ splunk_server=local"|table eai:acl.app,eai:acl.owner, summary.id, summary.size|rename eai:acl.app as app eai:acl.owner as owner summary.size as size summary.id as datamodel|eval sizeMB=round(size/1000000,2)|fields - size|addcoltotals sizeMB
@@ -329,8 +329,8 @@ step 2: for file in $(cat bucketlist.txt) ; do mv "$file" "${file}_1"; done
 
 
 
-grep -B20 -A40 -i "OOM" /var/log/message >> ~/OOM.log (RHEL/CentOS -- for Debian Based Systems use: /var/log/syslog) 
-grep -B20 -A40 -i "OOM Kill" /var/log/messages >> ~/OOM_Kill.log (RHEL/CentOS -- for Debian Based Systems use: /var/log/syslog) 
+grep -B20 -A40 -i "OOM" /var/log/message >> ~/OOM.log (RHEL/CentOS -- for Debian Based Systems use: /var/log/syslog)
+grep -B20 -A40 -i "OOM Kill" /var/log/messages >> ~/OOM_Kill.log (RHEL/CentOS -- for Debian Based Systems use: /var/log/syslog)
 
 
 
@@ -407,21 +407,21 @@ rcv_timeout = 300 – Same as above
 
 
 ### DETERMINE UNSUMMARIZED BUCKETS
-| summarize tstats=t action=probe id=DM_Splunk_SA_CIM_Network_Traffic normid= 
-    [ search search (index=* OR index=_*) ((`cim_Network_Traffic_indexes`) tag=network tag=communicate)] 
-| eval bucket_size_gb = bucket_size / 1024 / 1024 / 1024 
-| rex field=bucket_id "(?<bid>^\d+?)\_(?<guid>.*$)" 
-| eval bucketId = index."~".bid."~".guid 
+| summarize tstats=t action=probe id=DM_Splunk_SA_CIM_Network_Traffic normid=
+    [ search search (index=* OR index=_*) ((`cim_Network_Traffic_indexes`) tag=network tag=communicate)]
+| eval bucket_size_gb = bucket_size / 1024 / 1024 / 1024
+| rex field=bucket_id "(?<bid>^\d+?)\_(?<guid>.*$)"
+| eval bucketId = index."~".bid."~".guid
 | convert ctime(bucket_et) ctime(bucket_lt) ctime(summary_modtime)
 | eval isSummarized = if(summary_complete=0 AND summary_hot_done=0,0,1)
 | eventstats count as total_buckets count(eval(isSummarized=1)) as total_summarized count(eval(isSummarized=0)) as total_unsummarized
 | eval DMA_Completion = total_summarized / total_buckets * 100
 | search isSummarized=0
- 
+
 ### DBINSPECT
 | dbinspect index=<index>
 | search bucketId=<bucketid>
- 
+
 ### CM - REST BUCKET DETAILS
 | rest splunk_server=local /services/cluster/master/buckets/<bucketid>
 | transpose 0 header_field=title column_name="parameter"
@@ -496,11 +496,11 @@ tar tzvf diag_filename.tar.gz > diag_filename_TOC.txt
 
 
 From duckie, before changing frozen time period check for which buckets should roll:
-| dbinspect index=testing 
-| search NOT state=hot 
-| eval frozenTimePeriodInSecs=(86400 * 102), shouldfreeze = endEpoch + frozenTimePeriodInSecs 
-| where shouldfreeze < now() 
-| convert ctime(shouldfreeze), ctime(*Epoch) 
+| dbinspect index=testing
+| search NOT state=hot
+| eval frozenTimePeriodInSecs=(86400 * 102), shouldfreeze = endEpoch + frozenTimePeriodInSecs
+| where shouldfreeze < now()
+| convert ctime(shouldfreeze), ctime(*Epoch)
 | table splunk_server bucketId frozenTimePeriodInSecs startEpoch endEpoch shouldfreeze
 
 
@@ -558,7 +558,7 @@ check total data sitting in recv-q on a diag in backend of splunkbot
 echo "$((`grep -i tcp systeminfo.txt | grep -v tcp6 | grep splunkd | awk '{print $2}'| tr '\n' '+'` 0))"
 
 take output of above command and convert bytes to MB
-echo "$((`grep -i tcp systeminfo.txt | grep -v tcp6 | grep splunkd | awk '{print $2}'| tr '\n' '+'` 0))" |while read B dummy; do echo $((B/1024/1024))MB; done 
+echo "$((`grep -i tcp systeminfo.txt | grep -v tcp6 | grep splunkd | awk '{print $2}'| tr '\n' '+'` 0))" |while read B dummy; do echo $((B/1024/1024))MB; done
 
 
 
@@ -572,14 +572,14 @@ SPL search for corrupt buckets
 
 Total buckets vs unique buckets (must be run on CM)
 
-| rest splunk_server=local /services/cluster/master/peers 
-| stats sum(bucket_count) AS bucket_count_all 
-| eval bucket_count = round(bucket_count_all / 1000 / 1000,2)."M" 
-| eval replication_factor = 
-    [| rest splunk_server=local /services/cluster/config 
-    | return $replication_factor ] 
-| eval unique = round(bucket_count_all / replication_factor / 1000 / 1000,2)."M" 
-| fields bucket_count unique 
+| rest splunk_server=local /services/cluster/master/peers
+| stats sum(bucket_count) AS bucket_count_all
+| eval bucket_count = round(bucket_count_all / 1000 / 1000,2)."M"
+| eval replication_factor =
+    [| rest splunk_server=local /services/cluster/config
+    | return $replication_factor ]
+| eval unique = round(bucket_count_all / replication_factor / 1000 / 1000,2)."M"
+| fields bucket_count unique
 | rename bucket_count AS "Total Buckets", unique AS "Unique Buckets"
 
 
@@ -599,3 +599,4 @@ find /opt/splunk/ -type f -mmin -1 -exec ls -al {} \+
 # lshw -class disk -class storage
 
 
+this is some text for test commit
