@@ -1,0 +1,601 @@
+Handy Links/Tools
+
+https://<clustermaster>:8089/services/cluster/master/buckets
+
+
+
+convert bucket epoch times to gregorian
+
+ls -l /opt/splunk/var/lib/splunk/defaultdb/db | fgrep db_ | sed -r s/.*\(db_\(.+\)_\(.+\)_.*\)/\\1\\n\\2\\n\\3/ | gawk '/^db/ {print $0} /^1/ {print "    " strftime("%c", $0)}'
+
+
+For getting log information on search performance do the following:
+1. Change $splunkhome/etc/log-searchprocess.cfg "rootCategory=INFO  --> DEBUG"
+2. run problematic search
+3. open job inspector and copy the SID
+4. navigate to $splunkhome/var/run/splunk/dispatch
+5. Copy entire SID directory
+6. Look through search.log for issues
+7. Revert log level
+**NOTE** you do NOT need to restart for the log-searchprocess.cfg
+take a diag after you have run all the searches/collected directories so you can compare load on host/network etc during the time the searches were run
+
+
+Search query for blocked queues
+index=_internal source=*metrics.log blocked=true
+
+Searching for real-time searches
+"dispatch.earliest_time = rt*" AND "disabled = 0"
+
+
+show all apps and current status
+/SPLUNK_HOME/bin/splunk display app 
+
+
+tcpout thruput max and average search query
+index=_internal host=<inserthostnamehere> sourcetype=metrics group=tcpout_connections | eval KBps=tcp_Bps/1024 | timechart max(KBps) as MaxKBps avg(KBps) as AvgKBps
+
+
+
+compression on disk search query
+
+|dbinspect index=main
+| where eventCount > 10000
+|fields index,id,state,eventCount,rawSize,sizeOnDiskMB,sourceTypeCount
+|eval TotalRawMB=(rawSize/1024/1024)
+| eval compression=tostring(round(sizeOnDiskMB/TotalRawMB*100,2)) + "%"
+|table index, id, state, sourceTypeCount, TotalRawMB, sizeOnDiskMB, compression
+
+
+list off number of folders in a directory
+find -type d -maxdepth 1 | wc -l
+
+
+identify skipped searches
+
+index=_internal source = *scheduler.log status=skipped | stats count by user app savedsearch_name status
+
+
+
+https://answers.splunk.com/answers/327033/how-to-create-an-alert-for-a-forwarder-that-hasnt.html
+
+ index=_internal sourcetype=splunkd group=tcpin_connections NOT eventType=* 
+ | stats
+ max(_time) as last_connected,
+ sum(kb) as sum_kb by guid, hostname
+ | addinfo
+ | eval status = if(isnull(sum_kb) or (sum_kb <= 0) or (last_connected < (info_max_time - 900)), "missing", "active") 
+ | where status="missing"
+
+
+
+good upgrading case reference
+https://splunk.my.salesforce.com/50033000010W9q9
+
+
+
+reloading the auth services through REST endpoint
+
+http(s)://yourserver:8000/en-US/debug/refresh?entity=admin/auth-services
+
+
+License usage report and RolloverSummary
+index=_internal host=<license_master_instance_name> source=*/license_usage.log* type=RolloverSummary earliest=-30d
+
+
+
+check cron schedule in undiag backend for savedsearches.conf and when searches are running
+
+grep " cron_schedule" savedsearches.txt | cut -d' ' -s -f2 --complement | sort | uniq -c | sort -n
+
+alternatively
+
+./splunk btool savedsearches list --debug | grep " cron_schedule" | cut -d' ' -s -f2 --complement | sort | uniq -c | sort -n
+
+
+
+One member indexer cluster
+
+1. Make sure all the _*indexes are defined within the master apps. 
+2. Create small change on the master to create a new bundle. 
+3. Verify the CM is running. 
+4. Verify indexers are running; issue CLI fsck command to join the cluster. 
+5. Once completed please upload a diag of each instance if the work around does not resolve the issue.
+
+
+HTTP response time query
+
+index=_internal host="<yourhosthere>" source=*splunkd_access.log* NOT "/streams/" spent>999
+                        | eval spent=ceiling(spent/1000)
+                        | eval desc=case(spent<=1, "OKAY", spent<30, "WARNING", spent>29, "DANGER")
+                        | stats count by uri_path, spent, desc, _time
+
+
+
+check splunk to validate files
+
+/opt/splunk/bin/splunk validate files
+
+
+search for license usage by sourcetype
+
+index=_internal source=*license_usage.log* type="Usage" | eval h=if(len(h)=0 OR isnull(h),"(SQUASHED)",h) | eval s=if(len(s)=0 OR isnull(s),"(SQUASHED)",s) | eval idx=if(len(idx)=0 OR isnull(idx),"(UNKNOWN)",idx) | stats sum(b) as b by _time, pool, s, st, h, idx | timechart limit=100 sum(b) AS volumeB by st fixedrange=false | foreach * [eval <<FIELD>>=round('<<FIELD>>'/1024/1024, 3)]
+
+
+license usage by index
+
+index=_internal [`set_local_host`] source=*license_usage.log* type="Usage" | eval h=if(len(h)=0 OR isnull(h),"(SQUASHED)",h) | eval s=if(len(s)=0 OR isnull(s),"(SQUASHED)",s) | eval idx=if(len(idx)=0 OR isnull(idx),"(UNKNOWN)",idx) | bin _time span=1d | stats sum(b) as b by _time, pool, s, st, h, idx   | timechart span=1d sum(b) AS volumeB by idx fixedrange=false  limit=0| join type=outer _time [search index=_internal [`set_local_host`] source=*license_usage.log* type="RolloverSummary" earliest=-30d@d | eval _time=_time - 43200 | bin _time span=1d | stats latest(stacksz) AS "stack size" by _time] | fields - _timediff  | foreach * [eval <<FIELD>>=round('<<FIELD>>'/1024/1024/1024, 3)]
+
+
+
+Check input status
+
+Browser:
+https://<forwarderIP>:8089/services/admin/inputstatus/TailingProcessor:FileStatus
+
+CLI:
+./splunk list inputstatus
+
+
+Forwarder Diagnostics – Last time Data Was Received by Index and Sourcetype
+
+
+| tstats latest(_time) as Latest by host sourcetype index 
+| eval current=now() 
+| eval Minimum_Age=round(((current-Latest)/60)/60,2) 
+| rangemap field=Minimum_Age default=Critical Normal=0-0.5 Elevated=0.5-2 Warning=2-4
+| eval stIDX=tostring(index) + " -- " + tostring(sourcetype)
+| stats values(stIDX) as "Index -- Sourcetype" list(Latest) as "Latest Event" list(Minimum_Age) as Minimum_Age list(range) as Threshold by host bloc
+| convert ctime("Latest Event") 
+| eventstats avg(Minimum_Age) as average by host 
+| eval average=round(average,2) 
+| sort - average
+| rename Minimum_Age as "Hours Since Last Communication" average as "Average Time in Hours Since Last Communication"
+
+
+
+List of hosts and sourcetypes not sending data in last 24 Hours
+
+noop |append [ |metadata type=hosts | table *] | append [|metadata type=sourcetypes | table *] | eval t = now() - lastTime | where t > 86400 | eval name = coalesce(host,sourcetype)| table name t lastTime totalCount type |rename t as "Seconds since Event" | convert ctime(lastTime) timeformat="%m/%d/%Y %H:%M:%S %z"
+
+
+
+checking for duplicate data in the index (dupes)
+
+| stats count AS eventcount by _raw | where eventcount > 1
+
+
+
+roll hot buckets via REST API
+curl –k https://localhost:8089/services/data/indexes/[name]/roll-hot-buckets -x POST -u admin:password
+
+link to page
+https://www.batchworks.de/manually-roll-buckets-from-hot-to-warm/
+
+
+
+Set log levels
+
+grep -i <search term> log.cfg
+
+./splunk show log-level <COMPONENT>
+
+./splunk set log-level <COMPONENT> -level <LEVEL>
+
+
+Bonnie test parameters
+
+$ bonnie++ -d [/your volume] -s [twice your system RAM in MB] -u root:root -qfb 
+
+
+Latency between indexed time and actual time
+
+index=_internal sourcetype=splunkd | eval latency=_indextime - _time | stats avg(latency), max(latency), min(latency)
+
+
+bucket count grep across cluster
+
+echo "$(( `/opt/splunk/bin/splunk show cluster-status | grep Bucket\ Count | cut -d= -f2 | tr '\n' '+'` 0))" 
+
+
+Started, Skipped, Deferred searched (Bar Chart, Stacked): 
+
+index=_internal host="hostname" source=*metrics.log group=searchscheduler 
+| timechart partial=false sum(dispatched) AS Started, sum(skipped) AS Skipped 
+| appendcols [search index=_internal host="hostname" sourcetype=scheduler status=continued 
+| eval savedsearch_id_scheduled_time=savedsearch_id."-".scheduled_time 
+| timechart dc(savedsearch_id_scheduled_time) AS Deferred] 
+
+
+Scheduled search errors: 
+index=_internal host="hostname" source=*scheduler.log log_level=ERROR OR log_level=WARN 
+| cluster showcount=t 
+| table cluster_count, message, savedsearch_name 
+| sort - cluster_count 
+| rename cluster_count AS count message AS "Error Message" savedsearch_name AS "Scheduled search name" 
+
+
+
+
+http://www.brendangregg.com/blog/2014-07-25/opensnoop-for-linux.html
+
+
+find all the crashing threads across all diags, start from case_<number> dir:
+
+grep -H "Crashing\ thread" */log/*crash*| awk -F ":" '{print $5}'| sort |uniq -c
+
+
+Webserver On/Off
+
+./splunk disable webserver
+
+./splunk enable webserver
+
+
+
+
+loginBackgroundImageOption = [default| custom | none]
+* Controls display of the background image of the login page.
+* Defaults to "default".
+  * "default" displays the Splunk default background image.
+  * "custom" uses the background image defined by the backgroundImageCustomName setting.
+  * "none" removes any background image on the login page. A dark background color is applied.
+
+loginCustomBackgroundImage = <pathToMyFile or myApp:pathToMyFile>
+* Customize the login page background image.
+  * Supported image files include .jpg, .jpeg or .png with a maximum file size of 20Mb.
+  * Landscape image is recommended, with a minimum resolution of 1024x640 pixels.
+  * Using Splunk Web:
+    * Upload a custom image to a manager page under General Settings.
+    * The login page background image updates automatically.
+  * Using the CLI or a text editor:
+    * Set loginBackgroundImageOption = "custom".
+    * Place custom image file in default or manual location:
+      * Default destination folder: $SPLUNK_HOME/etc/apps/search/appserver/static/logincustombg.
+        * Example: If your image is located at $SPLUNK_HOME/etc/apps/search/appserver/static/logincustombg/img.png, type loginCustomBackgroundImage = logincustombg/img.png.
+      * Manual location: $SPLUNK_HOME/etc/apps/<myApp>/appserver/static/<pathToMyFile>, and type loginCustomBackgroundImage = <myApp:pathToMyFile>.
+    * The login page background image updates automatically.
+  * If no custom image is used, the default Splunk background image displays.
+
+
+
+
+
+Identifying DMA issues
+
+Per the webex, we identified that the datamodels were summarizing data for a longer period of time than necessary, causing a much higher load on the indexers. Additionally, we tuned the datamodels to only query the necessary indexes rather than having a more broad search. 
+
+The following tstats that we ran, identifies the sourcetypes and indexes that the datamodel has matched against. This is how we identified which indexes we wanted to refine down to in the actual datamodel query. 
+
+|tstats summariesonly=t count values(sourcetype) from datamodel=<modelname> by index 
+
+The following REST search shows what the actual query for the datamodel is and ensures that the change that was made has taken effect. 
+
+|rest /services/datamodel/acceleration | fields title search 
+
+
+
+
+Check for any app with a datamodel acceleration and give size on disk of summary data
+
+|rest servicesNS/-/-/data/models
+| search acceleration="1" 
+| table title eai:appName eai:userName
+| rename eai:appName AS name| eval myDatamodel="DM_" . name . "_" . title
+|map search="|rest /servicesNS/nobody/-/admin/summarization/tstats:$myDatamodel$ splunk_server=local"|table eai:acl.app,eai:acl.owner, summary.id, summary.size|rename eai:acl.app as app eai:acl.owner as owner summary.size as size summary.id as datamodel|eval sizeMB=round(size/1000000,2)|fields - size|addcoltotals sizeMB
+
+
+
+number of active splunk pids
+grep "splunkd\ pid" systeminfo.txt |wc -l
+
+number of cpus in systeminfo.txt
+grep ^processor systeminfo.txt |tail -1
+
+dbinspect for start/endtime of buckets and sizes
+
+| dbinspect index=main |eval rawsizeMB=round(rawSize/1024/1024,2)| eval indexedsizeMB=round(sizeOnDiskMB,2)|convert timeformat="%Y-%m-%d %H:%M:%S" ctime(endEpoch) AS end_time| convert timeformat="%Y-%m-%d %H:%M:%S" ctime(startEpoch) AS start_time| table bucketId start_time end_time state eventCount hostCount modTime path rawsizeMB indexedsizeMB sourceCount sourceTypeCount | sort state*
+
+
+Remove all of one specific bucket ID in a cluster
+curl -k -u <username>:<password> -X POST https://<host>:<mPort>/services/cluster/master/buckets/{bucket_id}/remove_all
+
+
+http://sleeplesscoding.blogspot.com/2011/01/using-tcpdump-to-sniff-http-traffic.html
+
+ubuntu02:~$ sudo tcpdump -c 20 -s 0 -i enp0s8 -A host 192.168.56.150  and udp port 53
+
+
+if ulimits aren't sticking through /etc/security/limits.conf
+
+https://serverfault.com/questions/544171/etc-security-limits-conf-soft-nproc-limit-appears-to-be-ignored
+
+
+
+batch edit files in mac terminal
+
+for file in <filename>.ext; do mv <echo for test> "$file" "prefix-$file-suffix"; done
+
+for file in case735522-*-diag-ldxx90spkinx[5678]-*.tar.gz; do undiag "$file" username --ADpassword password; sleep 60s; history -c; done
+
+
+batch edit directory names
+
+step 1: ls -la | grep -P "db_\d{10}_\d{10}_\d{<insert number of digits in last place for bucket here>}" | awk '{print $9}' > bucketlist.txt
+step 2: for file in $(cat bucketlist.txt) ; do mv "$file" "${file}_1"; done
+
+
+
+
+
+
+grep -B20 -A40 -i "OOM" /var/log/message >> ~/OOM.log (RHEL/CentOS -- for Debian Based Systems use: /var/log/syslog) 
+grep -B20 -A40 -i "OOM Kill" /var/log/messages >> ~/OOM_Kill.log (RHEL/CentOS -- for Debian Based Systems use: /var/log/syslog) 
+
+
+
+
+
+
+
+EPS Recommendations
+
+Index=_internal | stats count by host
+ - IO intensive, doesn't use CPU/Memory Heavily
+ - ~125k eps
+ 	events returned/amount of time/#of peers
+
+Index = _internal
+ - CPU/Memory used more
+ - ~4k eps
+
+
+
+
+
+Machine Learning
+
+sourcetype=access_combined price=*
+| eventstats max(price) as max min(price) as min range(price) as range
+| eval price_proportion = if(min=max, price, (price - min) / range)
+| sample proportional=price_proportion
+| stats count by price price_proportion
+
+
+| inputlookup autompg.csv
+| where horsepower !="?"| sample partitions=2 seed=12345
+| search partition_number=0
+| fit  PCA * k=3 |table PC*| fit KMeans k=3 PC_*
+|dedup cluster|table cluster PC_1 PC_2 PC_3
+
+| inputlookup housing.csv
+| sample partitions=3 seed=54
+| search partition_number < 2
+| apply scaler_model
+| apply PCA_reduction
+| fit DecisionTreeClassifier property_tax_rate as predicted from PC_* into PCA_classification
+| `classificationstatistics(property_tax_rate,predicted)`
+
+
+
+
+./btprobe -d SPLUNK_HOME/var/lib/splunk/fishbucket/splunk_private_db --file /etc/fstab --reset
+
+
+./btprobe -d /apps/tools/splunkforwarder/var/lib/splunk/fishbucket/splunk_private_db --file /etc/fstab --reset
+
+
+Recommended settings for large environments for Indexing/CM
+
+Indexers:
+
+In server.conf [clustering] change the following:
+
+cxn_timeout = 600 – Basic timeout value for establishing a connection between the cluster nodes
+send_timeout = 600 – Amount of time for a timeout with cluster nodes after a successful connection
+rcv_timeout = 600 – Timeout value for waiting for the data between cluster nodes
+heartbeat_period = 10 - Frequency(in secs) of heartbeat period with the cluster master
+
+Cluster Master:
+
+In server.conf [clustering] change the following:
+heartbeat_timeout = 600 – Timeout value for when the CM determines when a cluster member is “down”
+cxn_timeout = 300 – Same as above
+send_timeout = 300 – Same as above
+rcv_timeout = 300 – Same as above
+
+
+
+### DETERMINE UNSUMMARIZED BUCKETS
+| summarize tstats=t action=probe id=DM_Splunk_SA_CIM_Network_Traffic normid= 
+    [ search search (index=* OR index=_*) ((`cim_Network_Traffic_indexes`) tag=network tag=communicate)] 
+| eval bucket_size_gb = bucket_size / 1024 / 1024 / 1024 
+| rex field=bucket_id "(?<bid>^\d+?)\_(?<guid>.*$)" 
+| eval bucketId = index."~".bid."~".guid 
+| convert ctime(bucket_et) ctime(bucket_lt) ctime(summary_modtime)
+| eval isSummarized = if(summary_complete=0 AND summary_hot_done=0,0,1)
+| eventstats count as total_buckets count(eval(isSummarized=1)) as total_summarized count(eval(isSummarized=0)) as total_unsummarized
+| eval DMA_Completion = total_summarized / total_buckets * 100
+| search isSummarized=0
+ 
+### DBINSPECT
+| dbinspect index=<index>
+| search bucketId=<bucketid>
+ 
+### CM - REST BUCKET DETAILS
+| rest splunk_server=local /services/cluster/master/buckets/<bucketid>
+| transpose 0 header_field=title column_name="parameter"
+
+
+
+search that shows all scheduled searches
+| rest /servicesNS/-/-/saved/searches | search is_scheduled=1 | table title cron_schedule eai:acl.app
+
+
+
+-- delete files older than 1 day ---
+$SPLUNK_HOME/var/run/splunk/srtemp$ find . -ctime +1 -type d -exec rm -rf {} \;
+
+--- remove files older 120 minutes ---
+$SPLUNK_HOME/var/run/splunk/srtemp$ find . -cmin +120 -exec ls -ltr {} \;
+
+
+
+splunkbot diag-rvaparsplindex08.tar.gz; sleep 60s; echo 930176; sleep 20s; echo y; sleep 5s; echo y; done
+
+
+strace -vvv -y -p <splunk_pid>
+
+
+
+index=0014000000kbwiuaal case_number=1169140 host=* source=*audit.log* action=update lookups|rex field=path "\/opt\/splunk\/etc\/apps\/(?<app>.*)\/lookups"|rex field=path ".*lookups\/(?<lookupfile>.*)" |table size,app,lookupfile
+
+
+### CHECK SIZE OF KVSTORE COLLECTIONS
+| rest splunk_server=* /services/server/introspection/kvstore/collectionstats | mvexpand data | spath input=data | rex field=ns "(?<App>.*)\.(?<Collection>.*)" | eval dbsize=size/1024/1024 | eval indexsize=totalIndexSize/1024/1024 | stats first(count) AS "Number of Objects" first(nindexes) AS Accelerations first(indexsize) AS "Acceleration Size (MB)" first(dbsize) AS "Collection Size (MB)" by App, Collection
+
+
+
+splunk pid resource usage
+sourcetype = splunk_resource_usage component=PerProcess "data.process"=splunkd | timechart span=1h max("data.fd_used") by "data.pid"
+
+Datagen Curl
+curl -d startYear=2019 -d startMonth=1 -d startDay=2 -d startHours=00 -d startMinutes=00 -d startSeconds=01 -d key=KEY -d numEvents=50000 -d encoding=ASCII -d output=file -o syslog_events-50k.txt http://datagen.splunk.com/cgi-bin/gen.cgi
+
+./splunk list licenser-localslave
+./splunk list licenser-slaves
+
+
+kvstore collections via search
+
+| rest splunk_server=local /services/server/introspection/kvstore/collectionstats
+| mvexpand data
+| spath input=data
+| rex field=ns "(?<App>.*)\.(?<Collection>.*)"
+| eval dbsize=size/1024/1024
+| eval indexsize=totalIndexSize/1024/1024
+| stats first(count) AS "Number of Objects" first(nindexes) AS Accelerations first(indexsize) AS "Acceleration Size (MB)" first(dbsize) AS "Collection Size (MB)" by App,Collection
+
+
+
+Manually rebalance primaries across cluster during maintenance mode
+curl -k -u admin:changeme https://master:mgmt/services/cluster/master/control/control/rebalance_primaries -X POST
+
+
+
+Command string for watching restart status during rolling restart
+while true; do /opt/splunk/bin/splunk show cluster-status | grep -A20 "Peers restarting"; date; sleep 30; done
+
+Good setting for long maintenance mode times <12 hours
+/opt/splunk/bin/splunk edit cluster-config -mode master -max_fixup_time_ms 1000
+
+
+Create Table of Contents from Diag
+
+tar tzvf diag_filename.tar.gz > diag_filename_TOC.txt
+
+
+From duckie, before changing frozen time period check for which buckets should roll:
+| dbinspect index=testing 
+| search NOT state=hot 
+| eval frozenTimePeriodInSecs=(86400 * 102), shouldfreeze = endEpoch + frozenTimePeriodInSecs 
+| where shouldfreeze < now() 
+| convert ctime(shouldfreeze), ctime(*Epoch) 
+| table splunk_server bucketId frozenTimePeriodInSecs startEpoch endEpoch shouldfreeze
+
+
+
+diag security disclosure
+Your act of attaching your diag (or any other files) to this case is an implicit statement that information contained therein can be reviewed by this engineer, and other engineers at Splunk inc.
+
+Search for SB to identify cron schedules and locations
+
+source="*savedsearches_debug*" | rex "enableSched\s=\s(?<enabled_schedule>\d)" | rex "disabled\s=\s(?<disabled_search>\d)" | rex "\/etc\/apps\/\w+\/default\/savedsearches.conf\s*cron_schedule\s=\s(?<default_folder_for_search>\S.+)" | rex "\/etc\/apps\/\w+\/local\/savedsearches.conf\s*cron_schedule\s=\s(?<local_folder_for_search>\S.+)" |rex "\/etc\/apps\/(?<app>[^/]+)" | search enabled_schedule=1 disabled_search=0 | table app stanza default_folder_for_search local_folder_for_search
+
+
+Alfa Search Splunkbot savedsearches cron schedule
+
+source="*savedsearches_debug*" | rex "enableSched\s=\s(?<enabled_schedule>\d)" | rex "disabled\s=\s(?<disabled_search>\d)" | rex "\/etc\/apps\/\w+\/default\/savedsearches.conf\s*cron_schedule\s=\s(?<default_folder_for_search>\S.+)" | rex "\/etc\/apps\/\w+\/local\/savedsearches.conf\s*cron_schedule\s=\s(?<local_folder_for_search>\S.+)" |rex "\/etc\/apps\/(?<app>[^/]+)" | rex "\/etc\/apps\/\w+\/local\/savedsearches.conf\s*search\s=\s(?<local_search>\S.+)" | rex "\/etc\/apps\/\w+\/default\/savedsearches.conf\s*search\s=\s(?<default_search>\S.+)" | search enabled_schedule=1 disabled_search=0 | table app stanza default_folder_for_search default_search local_folder_for_search local_search
+
+SHC troubleshooting searches
+
+index=_internal <list of SHC members> "Error pulling configurations from captain" NOT "consecutiveErrors=1" | timechart span=1d count by host
+
+index=_internal <list of SHC members> "Error pushing configurations to captain" NOT "consecutiveErrors=1" | timechart span=1d count by host
+
+index=_internal <list of SHC members> earliest="<last baseline issue>" source=*conf.log* addCommit | timechart span=2m count by host
+
+index=_internal <list of SHC members> source=*conf.log* data.task=addCommit |stats count by data.asset_id
+
+
+diff'ing files
+
+sed -r 's/.{107}//' /Users/hkeyser/Downloads/resilient_dev.txt > /Users/hkeyser/Downloads/resilient_dev_cut.txt
+diff resilient_dev_cut.txt resilient_prod_cut.txt > diff_resilient.txt
+
+
+
+tcp pipeline creation difference
+
+index=<replace> case_number=<replace> host=<replace> case_file=<replace> source=*metrics.log* removed_channels
+                | eval out_pipeline= if(isnull(ingest_pipe),0,ingest_pipe)
+                | eval ingest_pipeline= if(isnull(ingest_pipe),0,ingest_pipe)
+                | eval totalpipes=round(new_channels-removed_channels)
+                | timechart span=30s max(totalpipes)
+
+
+grep and cut search criteria
+
+grep -i ssl3 splunkd.log* | cut -c37- | sort | uniq -c | sort -n
+
+indexer restart count total number of hot buckets created
+echo "$((`grep -i hotdbmanager splunkd.log | cut -c30- | sort | uniq -c | sort -n | cut -c7| tr '\n' '+'` 0))"
+
+check total data sitting in recv-q on a netstat
+echo "$((`netstat -plantu | grep tcp | grep -cv tcp6 | grep splunkd | cut -c7-12 | tr '\n' '+'` 0))"
+
+check total data sitting in recv-q on a diag in backend of splunkbot
+echo "$((`grep -i tcp systeminfo.txt | grep -v tcp6 | grep splunkd | awk '{print $2}'| tr '\n' '+'` 0))"
+
+take output of above command and convert bytes to MB
+echo "$((`grep -i tcp systeminfo.txt | grep -v tcp6 | grep splunkd | awk '{print $2}'| tr '\n' '+'` 0))" |while read B dummy; do echo $((B/1024/1024))MB; done 
+
+
+
+check all scsi mounts
+lsscsi
+
+SPL search for corrupt buckets
+| dbinspect index=_internal corruptonly=true
+
+
+
+Total buckets vs unique buckets (must be run on CM)
+
+| rest splunk_server=local /services/cluster/master/peers 
+| stats sum(bucket_count) AS bucket_count_all 
+| eval bucket_count = round(bucket_count_all / 1000 / 1000,2)."M" 
+| eval replication_factor = 
+    [| rest splunk_server=local /services/cluster/config 
+    | return $replication_factor ] 
+| eval unique = round(bucket_count_all / replication_factor / 1000 / 1000,2)."M" 
+| fields bucket_count unique 
+| rename bucket_count AS "Total Buckets", unique AS "Unique Buckets"
+
+
+proper size analysis with summary for one directory below current location
+du -ah -x --max-depth=1
+
+
+
+find the files modified since the last number of minutes looking back and list them with modtimes
+
+find <directory> -type f -mmin -<minutes> -exec ls -la {} \+
+
+find /opt/splunk/ -type f -mmin -1 -exec ls -al {} \+
+
+
+
+# lshw -class disk -class storage
+
+
