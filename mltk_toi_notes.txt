@@ -1,0 +1,24 @@
+MLTK information
+
+https://docs.splunk.com/Documentation/MLApp/5.1.0/User/Understandfitandapply
+
+ml-spl api guide on adding custom algorithms to the MLTK overview
+
+
+read up on linear regression
+
+Anthony Tellez
+Pierre Brunel
+
+2 main things:
+how fit/apply works
+how mlspl.conf works
+
+
+Unofficial app, but can help with sizing and performance understanding of the MLTK environment
+https://splunkbase.splunk.com/app/3289/
+
+ML Enablement FY20 information
+https://drive.google.com/drive/folders/13fJW-PFJpugRrYwML_i4l0hoFvEpDcSm
+ML Overview FY20
+https://drive.google.com/open?id=1BKG6FMPLILy9uSBclUSnB0WDIFcYGoCZV2axlLrq5Ik
