@@ -599,4 +599,7 @@ find /opt/splunk/ -type f -mmin -1 -exec ls -al {} \+
 # lshw -class disk -class storage
 
 
-this is some text for test commit
+Internal Other Helpful Pages
+
+Add-on Repro lab
+https://confluence.splunk.com/display/PROD/Splunk+Gear+Lab
