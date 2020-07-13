@@ -29,7 +29,7 @@ Searching for real-time searches
 
 
 show all apps and current status
-/SPLUNK_HOME/bin/splunk display app
+/SPLUNK_HOME/bin/splunk display app 
 
 
 tcpout thruput max and average search query
@@ -59,12 +59,12 @@ index=_internal source = *scheduler.log status=skipped | stats count by user app
 
 https://answers.splunk.com/answers/327033/how-to-create-an-alert-for-a-forwarder-that-hasnt.html
 
- index=_internal sourcetype=splunkd group=tcpin_connections NOT eventType=*
+ index=_internal sourcetype=splunkd group=tcpin_connections NOT eventType=* 
  | stats
  max(_time) as last_connected,
  sum(kb) as sum_kb by guid, hostname
  | addinfo
- | eval status = if(isnull(sum_kb) or (sum_kb <= 0) or (last_connected < (info_max_time - 900)), "missing", "active")
+ | eval status = if(isnull(sum_kb) or (sum_kb <= 0) or (last_connected < (info_max_time - 900)), "missing", "active") 
  | where status="missing"
 
 
@@ -86,7 +86,9 @@ index=_internal host=<license_master_instance_name> source=*/license_usage.log* 
 
 check cron schedule in undiag backend for savedsearches.conf and when searches are running
 
-grep " cron_schedule" savedsearches.txt | cut -d' ' -s -f2 --complement | sort | uniq -c | sort -n
+grep " cron_schedule" savedsearches_debug.txt | cut -d' ' -s -f2 --complement | sort | uniq -c | sort -n
+grep " cron_schedule" savedsearches.conf | cut -d' ' -s -f2 --complement | sort | uniq -c | sort -n
+
 
 alternatively
 
@@ -96,10 +98,10 @@ alternatively
 
 One member indexer cluster
 
-1. Make sure all the _*indexes are defined within the master apps.
-2. Create small change on the master to create a new bundle.
-3. Verify the CM is running.
-4. Verify indexers are running; issue CLI fsck command to join the cluster.
+1. Make sure all the _*indexes are defined within the master apps. 
+2. Create small change on the master to create a new bundle. 
+3. Verify the CM is running. 
+4. Verify indexers are running; issue CLI fsck command to join the cluster. 
 5. Once completed please upload a diag of each instance if the work around does not resolve the issue.
 
 
@@ -140,15 +142,15 @@ CLI:
 Forwarder Diagnostics – Last time Data Was Received by Index and Sourcetype
 
 
-| tstats latest(_time) as Latest by host sourcetype index
-| eval current=now()
-| eval Minimum_Age=round(((current-Latest)/60)/60,2)
+| tstats latest(_time) as Latest by host sourcetype index 
+| eval current=now() 
+| eval Minimum_Age=round(((current-Latest)/60)/60,2) 
 | rangemap field=Minimum_Age default=Critical Normal=0-0.5 Elevated=0.5-2 Warning=2-4
 | eval stIDX=tostring(index) + " -- " + tostring(sourcetype)
 | stats values(stIDX) as "Index -- Sourcetype" list(Latest) as "Latest Event" list(Minimum_Age) as Minimum_Age list(range) as Threshold by host bloc
-| convert ctime("Latest Event")
-| eventstats avg(Minimum_Age) as average by host
-| eval average=round(average,2)
+| convert ctime("Latest Event") 
+| eventstats avg(Minimum_Age) as average by host 
+| eval average=round(average,2) 
 | sort - average
 | rename Minimum_Age as "Hours Since Last Communication" average as "Average Time in Hours Since Last Communication"
 
@@ -185,7 +187,7 @@ grep -i <search term> log.cfg
 
 Bonnie test parameters
 
-$ bonnie++ -d [/your volume] -s [twice your system RAM in MB] -u root:root -qfb
+$ bonnie++ -d [/your volume] -s [twice your system RAM in MB] -u root:root -qfb 
 
 
 Latency between indexed time and actual time
@@ -195,24 +197,24 @@ index=_internal sourcetype=splunkd | eval latency=_indextime - _time | stats avg
 
 bucket count grep across cluster
 
-echo "$(( `/opt/splunk/bin/splunk show cluster-status | grep Bucket\ Count | cut -d= -f2 | tr '\n' '+'` 0))"
+echo "$(( `/opt/splunk/bin/splunk show cluster-status | grep Bucket\ Count | cut -d= -f2 | tr '\n' '+'` 0))" 
 
 
-Started, Skipped, Deferred searched (Bar Chart, Stacked):
+Started, Skipped, Deferred searched (Bar Chart, Stacked): 
 
-index=_internal host="hostname" source=*metrics.log group=searchscheduler
-| timechart partial=false sum(dispatched) AS Started, sum(skipped) AS Skipped
-| appendcols [search index=_internal host="hostname" sourcetype=scheduler status=continued
-| eval savedsearch_id_scheduled_time=savedsearch_id."-".scheduled_time
-| timechart dc(savedsearch_id_scheduled_time) AS Deferred]
+index=_internal host="hostname" source=*metrics.log group=searchscheduler 
+| timechart partial=false sum(dispatched) AS Started, sum(skipped) AS Skipped 
+| appendcols [search index=_internal host="hostname" sourcetype=scheduler status=continued 
+| eval savedsearch_id_scheduled_time=savedsearch_id."-".scheduled_time 
+| timechart dc(savedsearch_id_scheduled_time) AS Deferred] 
 
 
-Scheduled search errors:
-index=_internal host="hostname" source=*scheduler.log log_level=ERROR OR log_level=WARN
-| cluster showcount=t
-| table cluster_count, message, savedsearch_name
-| sort - cluster_count
-| rename cluster_count AS count message AS "Error Message" savedsearch_name AS "Scheduled search name"
+Scheduled search errors: 
+index=_internal host="hostname" source=*scheduler.log log_level=ERROR OR log_level=WARN 
+| cluster showcount=t 
+| table cluster_count, message, savedsearch_name 
+| sort - cluster_count 
+| rename cluster_count AS count message AS "Error Message" savedsearch_name AS "Scheduled search name" 
 
 
 
@@ -263,15 +265,15 @@ loginCustomBackgroundImage = <pathToMyFile or myApp:pathToMyFile>
 
 Identifying DMA issues
 
-Per the webex, we identified that the datamodels were summarizing data for a longer period of time than necessary, causing a much higher load on the indexers. Additionally, we tuned the datamodels to only query the necessary indexes rather than having a more broad search.
+Per the webex, we identified that the datamodels were summarizing data for a longer period of time than necessary, causing a much higher load on the indexers. Additionally, we tuned the datamodels to only query the necessary indexes rather than having a more broad search. 
 
-The following tstats that we ran, identifies the sourcetypes and indexes that the datamodel has matched against. This is how we identified which indexes we wanted to refine down to in the actual datamodel query.
+The following tstats that we ran, identifies the sourcetypes and indexes that the datamodel has matched against. This is how we identified which indexes we wanted to refine down to in the actual datamodel query. 
 
-|tstats summariesonly=t count values(sourcetype) from datamodel=<modelname> by index
+|tstats summariesonly=t count values(sourcetype) from datamodel=<modelname> by index 
 
-The following REST search shows what the actual query for the datamodel is and ensures that the change that was made has taken effect.
+The following REST search shows what the actual query for the datamodel is and ensures that the change that was made has taken effect. 
 
-|rest /services/datamodel/acceleration | fields title search
+|rest /services/datamodel/acceleration | fields title search 
 
 
 
@@ -279,7 +281,7 @@ The following REST search shows what the actual query for the datamodel is and e
 Check for any app with a datamodel acceleration and give size on disk of summary data
 
 |rest servicesNS/-/-/data/models
-| search acceleration="1"
+| search acceleration="1" 
 | table title eai:appName eai:userName
 | rename eai:appName AS name| eval myDatamodel="DM_" . name . "_" . title
 |map search="|rest /servicesNS/nobody/-/admin/summarization/tstats:$myDatamodel$ splunk_server=local"|table eai:acl.app,eai:acl.owner, summary.id, summary.size|rename eai:acl.app as app eai:acl.owner as owner summary.size as size summary.id as datamodel|eval sizeMB=round(size/1000000,2)|fields - size|addcoltotals sizeMB
@@ -329,8 +331,8 @@ step 2: for file in $(cat bucketlist.txt) ; do mv "$file" "${file}_1"; done
 
 
 
-grep -B20 -A40 -i "OOM" /var/log/message >> ~/OOM.log (RHEL/CentOS -- for Debian Based Systems use: /var/log/syslog)
-grep -B20 -A40 -i "OOM Kill" /var/log/messages >> ~/OOM_Kill.log (RHEL/CentOS -- for Debian Based Systems use: /var/log/syslog)
+grep -B20 -A40 -i "OOM" /var/log/message >> ~/OOM.log (RHEL/CentOS -- for Debian Based Systems use: /var/log/syslog) 
+grep -B20 -A40 -i "OOM Kill" /var/log/messages >> ~/OOM_Kill.log (RHEL/CentOS -- for Debian Based Systems use: /var/log/syslog) 
 
 
 
@@ -407,21 +409,21 @@ rcv_timeout = 300 – Same as above
 
 
 ### DETERMINE UNSUMMARIZED BUCKETS
-| summarize tstats=t action=probe id=DM_Splunk_SA_CIM_Network_Traffic normid=
-    [ search search (index=* OR index=_*) ((`cim_Network_Traffic_indexes`) tag=network tag=communicate)]
-| eval bucket_size_gb = bucket_size / 1024 / 1024 / 1024
-| rex field=bucket_id "(?<bid>^\d+?)\_(?<guid>.*$)"
-| eval bucketId = index."~".bid."~".guid
+| summarize tstats=t action=probe id=DM_Splunk_SA_CIM_Network_Traffic normid= 
+    [ search search (index=* OR index=_*) ((`cim_Network_Traffic_indexes`) tag=network tag=communicate)] 
+| eval bucket_size_gb = bucket_size / 1024 / 1024 / 1024 
+| rex field=bucket_id "(?<bid>^\d+?)\_(?<guid>.*$)" 
+| eval bucketId = index."~".bid."~".guid 
 | convert ctime(bucket_et) ctime(bucket_lt) ctime(summary_modtime)
 | eval isSummarized = if(summary_complete=0 AND summary_hot_done=0,0,1)
 | eventstats count as total_buckets count(eval(isSummarized=1)) as total_summarized count(eval(isSummarized=0)) as total_unsummarized
 | eval DMA_Completion = total_summarized / total_buckets * 100
 | search isSummarized=0
-
+ 
 ### DBINSPECT
 | dbinspect index=<index>
 | search bucketId=<bucketid>
-
+ 
 ### CM - REST BUCKET DETAILS
 | rest splunk_server=local /services/cluster/master/buckets/<bucketid>
 | transpose 0 header_field=title column_name="parameter"
@@ -496,11 +498,11 @@ tar tzvf diag_filename.tar.gz > diag_filename_TOC.txt
 
 
 From duckie, before changing frozen time period check for which buckets should roll:
-| dbinspect index=testing
-| search NOT state=hot
-| eval frozenTimePeriodInSecs=(86400 * 102), shouldfreeze = endEpoch + frozenTimePeriodInSecs
-| where shouldfreeze < now()
-| convert ctime(shouldfreeze), ctime(*Epoch)
+| dbinspect index=testing 
+| search NOT state=hot 
+| eval frozenTimePeriodInSecs=(86400 * 102), shouldfreeze = endEpoch + frozenTimePeriodInSecs 
+| where shouldfreeze < now() 
+| convert ctime(shouldfreeze), ctime(*Epoch) 
 | table splunk_server bucketId frozenTimePeriodInSecs startEpoch endEpoch shouldfreeze
 
 
@@ -544,6 +546,10 @@ index=<replace> case_number=<replace> host=<replace> case_file=<replace> source=
                 | timechart span=30s max(totalpipes)
 
 
+source=*metrics.log* new_channels |timechart max(new_channels) 
+
+
+
 grep and cut search criteria
 
 grep -i ssl3 splunkd.log* | cut -c37- | sort | uniq -c | sort -n
@@ -557,8 +563,11 @@ echo "$((`netstat -plantu | grep tcp | grep -cv tcp6 | grep splunkd | cut -c7-12
 check total data sitting in recv-q on a diag in backend of splunkbot
 echo "$((`grep -i tcp systeminfo.txt | grep -v tcp6 | grep splunkd | awk '{print $2}'| tr '\n' '+'` 0))"
 
-take output of above command and convert bytes to MB
-echo "$((`grep -i tcp systeminfo.txt | grep -v tcp6 | grep splunkd | awk '{print $2}'| tr '\n' '+'` 0))" |while read B dummy; do echo $((B/1024/1024))MB; done
+take output of above command and convert bytes to KB
+echo "$((`grep -i tcp systeminfo.txt | grep -v tcp6 | grep splunkd | awk '{print $2}'| tr '\n' '+'` 0))" |while read B dummy; do echo $((B/1024))KB; done 
+
+check the status of the connection(established, time_wait, etc.) per process for splunk and count them
+grep -i tcp systeminfo.txt | grep -v tcp6 | grep -i 'splunkd\|mongod\|python' | awk -F"[ /\\\[]+" '{print $6,$8}' | sort -n | uniq -c
 
 
 
@@ -572,14 +581,14 @@ SPL search for corrupt buckets
 
 Total buckets vs unique buckets (must be run on CM)
 
-| rest splunk_server=local /services/cluster/master/peers
-| stats sum(bucket_count) AS bucket_count_all
-| eval bucket_count = round(bucket_count_all / 1000 / 1000,2)."M"
-| eval replication_factor =
-    [| rest splunk_server=local /services/cluster/config
-    | return $replication_factor ]
-| eval unique = round(bucket_count_all / replication_factor / 1000 / 1000,2)."M"
-| fields bucket_count unique
+| rest splunk_server=local /services/cluster/master/peers 
+| stats sum(bucket_count) AS bucket_count_all 
+| eval bucket_count = round(bucket_count_all / 1000 / 1000,2)."M" 
+| eval replication_factor = 
+    [| rest splunk_server=local /services/cluster/config 
+    | return $replication_factor ] 
+| eval unique = round(bucket_count_all / replication_factor / 1000 / 1000,2)."M" 
+| fields bucket_count unique 
 | rename bucket_count AS "Total Buckets", unique AS "Unique Buckets"
 
 
@@ -596,10 +605,251 @@ find /opt/splunk/ -type f -mmin -1 -exec ls -al {} \+
 
 
 
+
 # lshw -class disk -class storage
 
 
-Internal Other Helpful Pages
+from $SPLUNK_HOME/etc/users, analyze the metadata and the versions listed within them
 
-Add-on Repro lab
-https://confluence.splunk.com/display/PROD/Splunk+Gear+Lab
+grep -ir "version\ =\ " .
+grep -ir "version\ =\ " . | awk '{print $3}'
+grep -ir "version\ =\ " . | grep -v Binary | grep -v Solution | awk '{print $3}' | sort -n | uniq -c
+grep -ir "version\ =\ " . | grep Binary | awk '{print $3}' | cut -b 1,2 --complement | cut -d "/" -f 1 | sort -n | uniq -c | awk '{print $2}' 
+grep -air "version\ =\ " .
+cat `grep -ir "version\ =\ " | grep Binary | cut -d " " -f 3` | strings -af | grep "version\ =\ 7.3.2"
+
+
+
+
+
+
+
+bulk extract and directory renaming
+
+extract and rename the directories according to hostname rather than <host.domain.mynetwork.com>
+
+for file in *.tgz; do fileOut=$(echo $file | cut -d '.' -f1 | cut -d '-' -f1); tar -xvzf $fileOut*.tgz; mv opt $fileOut; done
+
+batch flamegraphs oneliner
+
+Make sure that the directory(-ies) have been created for the new case under your preferred location(s)
+
+Directories required under flamegraph:
+
+flamegraph
+----Case number
+--------pstacks
+--------pstacksOutput
+
+for dir in ~/flamegraph/<yourcasenumber>/pstacks/*; do dirOut=$(echo $dir | cut -d '/' -f 7); echo $dirOut; ~/flamegraph/FlameGraph-master/getstacks.py --title $dirOut -F -v ~/flamegraph/<yourcasenumber>/pstacks/$dirOut/<anySubDirectoriesFromThePstackCapture>/ > ~/flamegraph/<yourcasenumber>/pstacksOutput/$dirOut.svg; sleep 1s; done
+
+****You may need to edit the cut -f number to a higher/lower number depending on the depth of the actual hostnames in your folder
+
+
+
+
+
+More Flamegraph Info
+
+https://github.com/brendangregg/FlameGraph
+
+
+Consistent Palette
+
+If you use the --cp option, it will use the $colors selection and randomly generate the palette like normal. Any future flamegraphs created using the --cp option will use the same palette map. Any new symbols from future flamegraphs will have their colors randomly generated using the $colors selection.
+
+If you don't like the palette, just delete the palette.map file.
+
+This allows your to change your colorscheme between flamegraphs to make the differences REALLY stand out.
+
+Example:
+
+Say we have 2 captures, one with a problem, and one when it was working (whatever "it" is):
+
+cat working.folded | ./flamegraph.pl --cp > working.svg
+# this generates a palette.map, as per the normal random generated look.
+
+cat broken.folded | ./flamegraph.pl --cp --colors mem > broken.svg
+# this svg will use the same palette.map for the same events, but a very
+# different colorscheme for any new events.
+
+
+
+
+
+
+
+
+
+
+
+Windows Stuff
+
+sfc /scannow
+sfc /verify
+
+dism - basically SFC but does a deeper dive
+
+
+
+
+
+
+Search Head Clustering Golden Configs
+
+
+[shclustering]
+cxn_timeout = 120
+send_timeout = 120
+rcv_timeout = 120
+cxn_timeout_raft = 4
+send_timeout_raft = 10
+rcv_timeout_raft = 10
+election_timeout_ms = 120000
+enable_jobs_data_lite = true
+executor_workers = 30
+replication_factor = 2
+heartbeat_timeout = 120
+
+
+
+
+
+#####
+DBINSPECT 
+####
+
+#  basic which coverts EPOCH
+|dbinspect index=indexname | convert ctime(endEpoch) AS earliestTime | convert ctime(startEpoch) AS latestTime
+
+# same but tables it:
+|dbinspect index=indexname | convert ctime(endEpoch) AS earliestTime | convert ctime(startEpoch) AS latestTime | table bucketId, earliestTime,latestTime
+
+##### to show index stats
+| dbinspect index=* 
+ | search tsidxState="full" bucketId=*
+     | eval ageDays=round((endEpoch-startEpoch)/84000,10)
+ | stats min(startEpoch) as MinStartTime max(startEpoch) as MaxStartTime min(endEpoch) as MinEndTime max(endEpoch) as MaxEndTime max(hostCount) as MaxHosts max(sourceTypeCount) as MaxSourceTypes sum(eventCount) as TotalEvents sum(rawSize) as rawSizeBytes sum(sizeOnDiskMB) as sizeOnDiskBytes values(ageDays) as ageDays dc(bucketId) as countBuckets by index bucketId, state 
+     | where ageDays<90 AND ageDays>0.0000000000 
+     | eval sizeOnDiskBytes=round(sizeOnDiskBytes*pow(1024,2))
+     | eval dailyDisk=round(sizeOnDiskBytes/ageDays,5)
+     | eval dailyRaw=round(rawSizeBytes/ageDays,5)
+     | eval dailyEventCount=round(TotalEvents/ageDays)
+ | table index bucketId state dailyDisk ageDays rawSizeBytes, sizeOnDiskBytes TotalEvents PercentSizeReduction dailyRaw dailyEventCount ageDays
+ | stats sum(dailyDisk) as dailyBDiskBucket, values(ageDays), sum(dailyRaw) as dailyBRaw sum(dailyEventCount) as dailyEvent, avg(dailyDisk) as dailyBDiskAvg, avg(dailyRaw) as dailyBRawAvg, avg(dailyEventCount) as dailyEventAvg, dc(bucketId) as countBucket by index, state, ageDays
+     | eval bPerEvent=round(dailyBDiskBucket/dailyEvent)
+     | eval bPerEventRaw=round(dailyBRaw/dailyEvent)
+ | table dailyBDiskBucket index ageDays dailyEvent bPerEvent dailyBRaw bPerEventRaw state
+     | sort ageDays
+ | stats sum(dailyBDiskBucket) as Vol_totDBSize, avg(dailyBDiskBucket) as Vol_avgDailyIndexed, max(dailyBDiskBucket) as Vol_largestVolBucket, avg(dailyEvent) as avgEventsPerDay, avg(bPerEvent) as Vol_avgVolPerEvent, avg(dailyBRaw) as Vol_avgDailyRawVol, avg(bPerEventRaw) as Vol_avgVolPerRawEvent, range(ageDays) as rangeAge by index, state
+     | foreach Vol_* [eval <<FIELD>>=if(<<FIELD>> >= pow(1024,3), tostring(round(<<FIELD>>/pow(1024,3),3))+ " GB", if(<<FIELD>> >= pow(1024,2), tostring(round(<<FIELD>>/pow(1024,2),3))+ " MB", if(<<FIELD>> >= pow(1024,1), tostring(round(<<FIELD>>/pow(1024,2),3))+ " KB", tostring(round(<<FIELD>>)) + " bytes")))]
+     | rename Vol_* as *
+     | eval comb="Index Avg/day: " + avgDailyIndexed + "," + "Raw Avg/day: " + avgDailyRawVol + "," + "DB Size: " + totDBSize + "," + "Per Event Avg/Vol: " + avgVolPerEvent + "," + "Retention Range: " + tostring(round(rangeAge))
+     | eval comb = split(comb,",")
+ | xyseries index state comb
+ | table index hot warm cold 
+
+
+
+
+Search for per process memory utilization
+
+source=*resource* component=PerProcess | eval process = 'data.process' | eval args= 'data.args' | eval sid = 'data.search_props.sid' | eval process_class = case( process=="mongod", "KV store", process=="splunk-optimize","index service", process=="sh" OR process=="ksh" OR process=="bash" OR like(process,"python%") OR process=="powershell","scripted input")| eval process_class = case( process=="splunkd" AND ((like(args,"-p %start%") AND NOT like(args,"%process-runner%")) OR args=="service"),"splunkd server", process=="splunkd" AND isnotnull(sid), "search", process=="splunkd" AND (like(args,"fsck%") OR like(args,"recover-metadata%") OR like(args,"cluster_thing")),"index service", process=="splunkd" AND args=="instrument-resource-usage","scripted input", (like(process,"python%") AND like(args,"%/appserver/mrsparkle/root.py%")) OR like(process,"splunkweb"),"Splunk Web", isnotnull(process_class), process_class)| eval process_class = if(isnull(process_class),"other",process_class) | timechart span=5m avg(data.mem_used) as Memory_Used by process_class
+
+
+
+
+
+
+
+
+Helpful SHC searches to run
+
+A.) What is the latest common bundle id on the SH? Run the following search on the SH logging the WARN msg (if SHC, run it on the SHC captain since the captain sends the bundle to the indexers):
+
+| rest splunk_server=local /services/search/distributed/bundle-replication-files | convert ctime(timestamp) as timestamp| eval sizeMB= round(size/1024/1024,2) | table splunk_server filename location size sizeMB timestamp title| rename title as "bundle version" | join splunk_server [| rest splunk_server=local /services/configs/conf-distsearch | search maxBundleSize=* | table splunk_server maxBundleSize | rename maxBundleSize as "maxBundleSize (distsearch.conf)"]
+
+# note: since you are unable to log directly into a specific SH, you can log into the SHC captain from the cli and run the search from there:
+
+splunk search '| rest splunk_server=local /services/search/distributed/bundle-replication-files | convert ctime(timestamp) as timestamp| eval sizeMB= round(size/1024/1024,2) | table splunk_server filename location size sizeMB timestamp title| rename title as "bundle version" | join splunk_server [| rest splunk_server=local /services/configs/conf-distsearch | search maxBundleSize=* | table splunk_server maxBundleSize | rename maxBundleSize as "maxBundleSize (distsearch.conf)"] '
+
+From the results look at the latest timestamp and copy the "bundle version" id which we will use in the next search. As an example, we will use a bundle version of 8748801169886468464.
+
+B.) Determine which peer(s) do not have that latest bundle. Run the following search on the SH logging the WARN msg (if SHC, run it on the SHC captain since the captain sends the bundle to the indexers):
+
+| rest splunk_server=local /services/search/distributed/peers
+| rex field=bundle_isIndexing "\w\s-\s(?<truefalse>\w+)"
+| stats values(bundle_versions) as "bundle_versions" dc(bundle_versions) as "bundle versions on indexer" by splunk_server host status version guid
+| rename version as "indexer version" guid as "indexer guid" host as indexer| search bundle_versions!=8748801169886468464
+
+#note: the messages tab in the SH should also be indicating which peer(s) are having an issue
+
+
+
+
+search for avg tcpout thruput per pipeline and additional stats
+
+|stats sum(tcp_avg_thruput) median(tcp_avg_thruput) avg(tcp_avg_thruput) max(tcp_avg_thruput) min(tcp_avg_thruput) by ingest_pipe
+    |eval avg(KB)='avg(tcp_avg_thruput)'
+    |eval sum(KB)='sum(tcp_avg_thruput)'
+    |eval median(KB)='median(tcp_avg_thruput)'
+    |eval max(KB)='max(tcp_avg_thruput)'
+    |eval min(KB)='min(tcp_avg_thruput)'
+|table ingest_pipe,sum(KB),median(KB),avg(KB),max(KB),min(KB)
+
+search for avg tcpout thruput and chart over time
+
+|timechart span=30s avg(tcp_avg_thruput) by ingest_pipe
+
+
+Long Event Check:
+
+Sourcetype=splunkd AggregatorMiningProcessor OR LineBreakingProcessor OR DateParserVerbose WARN | rex "(?<type>(Failed to parse timestamp|suspiciously far away|outside of the acceptable time window|too far away from the previous|Accepted time format has changed|Breaking event because limit of \d+|Truncating line because limit of \d+))" | eval type=if(isnull(type),"unknown",type) | rex "source=(?<eventsource>[^\|]*)\|host=(?<eventhost>[^\|]*)\|(?<eventsourcetype>[^\|]*)\|(?<eventport>[^\s]*)" | eval eventsourcetype=if(isnull(eventsourcetype),data_sourcetype,eventsourcetype) | stats count dc(eventhost) values(eventsource) dc(eventsource) values(type) values(index) by component eventsourcetype | sort -count
+
+
+
+
+
+
+
+useACK vs tcpoutQueue search
+
+index=<customerindex> case_number=<casenumber> case_file=<diagname> sourcetype=splunkd component=TcpOutputProc waitingAckQ
+| rex "(?<ackWaitQueue>\_waitingAckQ\.size\(\))=(?<ackQsize>\d*)"
+|timechart span=30s max(ackQsize), avg(ackQsize)
+|appendcols [search index=<customerindex> case_number=<casenumber> host=<host> case_file=<diagname> sourcetype=metrics
+                        group=queue name=tcpout_splunk
+                        | eval max=if(isnotnull(max_size_kb),max_size_kb,max_size)
+                        | eval curr=if(isnotnull(current_size_kb),current_size_kb,current_size)
+                        | eval fill_perc=round((curr/max)*100,2)
+                        | timechart span=30s max(fill_perc) by name]
+
+
+
+
+
+
+
+Cluster Master (CM) task priorities
+
+Real time searches
+Initial Indexing (UDP>TCP>LOCAL)
+Searching (Adhoc/API>Scheduled)
+Replications (SF > RF)
+Rebalance/Remove Excess Buckets
+
+
+
+
+Get size on disk for cached SmartStore indexes
+
+|dbinspect cached=t index=<yourindex> | stats sum(sizeOnDisk)
+
+
+
+
+
+
+
+
+
