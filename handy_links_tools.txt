@@ -543,10 +543,21 @@ index=<replace> case_number=<replace> host=<replace> case_file=<replace> source=
                 | eval out_pipeline= if(isnull(ingest_pipe),0,ingest_pipe)
                 | eval ingest_pipeline= if(isnull(ingest_pipe),0,ingest_pipe)
                 | eval totalpipes=round(new_channels-removed_channels)
-                | timechart span=30s max(totalpipes)
+                | timechart span=30s max(totalpipes) by host
 
 
 source=*metrics.log* new_channels |timechart max(new_channels) 
+
+Average events over time
+
+index=<insertindex> source=*http_event_collector_metrics* | timechart span=1m avg(data.num_of_events)
+
+index=_internal source=*metrics.log* channels | timechart span=30s avg(current_size), avg(inactive_channels) by ingest_pipe
+
+index=_internal source=*metrics.log* group=per_index_thruput series=<insertserieshere> | timechart span=30s avg(eps) by ingest_pipe
+
+index=_internal source=*metrics.log* inactive_channels | timechart max(current_size), max(inactive_channels), max(new_channels) by ingest_pipe
+
 
 
 
@@ -847,6 +858,11 @@ Get size on disk for cached SmartStore indexes
 
 
 
+https://www.sslshopper.com/article-most-common-openssl-commands.html
+
+OpenSSL syntax for checking cert expiration
+
+openssl x509 -in certificate.crt -text -noout
 
 
 
