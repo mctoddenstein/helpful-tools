@@ -6,11 +6,11 @@ https://<clustermaster>:8089/services/cluster/master/buckets
 
 convert bucket epoch times to gregorian
 
-ls -l /opt/splunk/var/lib/splunk/defaultdb/db | fgrep db_ | sed -r s/.*\(db_\(.+\)_\(.+\)_.*\)/\\1\\n\\2\\n\\3/ | gawk '/^db/ {print $0} /^1/ {print "    " strftime("%c", $0)}'
+ls -l /opt/splunk/var/lib/splunk/defaultdb/db | fgrep db_ | sed -r s/.*\(db_\(.+\)_\(.+\)_.*\)/\\1\\n\\2\\n\\3/ | gawk '/^db/ {print $0} /^1/ {print " " strftime("%c", $0)}'
 
 
 For getting log information on search performance do the following:
-1. Change $splunkhome/etc/log-searchprocess.cfg "rootCategory=INFO  --> DEBUG"
+1. Change $splunkhome/etc/log-searchprocess.cfg "rootCategory=INFO--> DEBUG"
 2. run problematic search
 3. open job inspector and copy the SID
 4. navigate to $splunkhome/var/run/splunk/dispatch
@@ -387,7 +387,7 @@ sourcetype=access_combined price=*
 ./btprobe -d /apps/tools/splunkforwarder/var/lib/splunk/fishbucket/splunk_private_db --file /etc/fstab --reset
 
 
-Recommended settings for large environments for Indexing/CM
+Recommended settings for large environments for Indexing/CM (Golden Config)
 
 Indexers:
 
@@ -519,6 +519,12 @@ Alfa Search Splunkbot savedsearches cron schedule
 
 source="*savedsearches_debug*" | rex "enableSched\s=\s(?<enabled_schedule>\d)" | rex "disabled\s=\s(?<disabled_search>\d)" | rex "\/etc\/apps\/\w+\/default\/savedsearches.conf\s*cron_schedule\s=\s(?<default_folder_for_search>\S.+)" | rex "\/etc\/apps\/\w+\/local\/savedsearches.conf\s*cron_schedule\s=\s(?<local_folder_for_search>\S.+)" |rex "\/etc\/apps\/(?<app>[^/]+)" | rex "\/etc\/apps\/\w+\/local\/savedsearches.conf\s*search\s=\s(?<local_search>\S.+)" | rex "\/etc\/apps\/\w+\/default\/savedsearches.conf\s*search\s=\s(?<default_search>\S.+)" | search enabled_schedule=1 disabled_search=0 | table app stanza default_folder_for_search default_search local_folder_for_search local_search
 
+REST API search for savedsearches and info about them
+
+| rest /servicesNS/-/-/saved/searches
+| search disabled=0
+| table title, search, updated, eai:acl.app, eai:acl.owner, eai:acl.sharing, description, cron_schedule, author, allow_skew
+
 SHC troubleshooting searches
 
 index=_internal <list of SHC members> "Error pulling configurations from captain" NOT "consecutiveErrors=1" | timechart span=1d count by host
@@ -585,9 +591,16 @@ diag for windows machine systeminfo.txt - grep within file for splunk ports and 
 
 grep -i tcp systeminfo.txt | grep -v "tcp6\|127.0.0.1\|0.0.0.0\|::]\|over" | grep -w "8089\|8000\|8065\|8191\|9997\|8081\|9887\|8181\|8080\|8088" | awk -F"[ /\\\[:]+" '{print $6,$7}' | uniq -c | sort -n | sed -e 's/^[ \t]*//' | column -t
 
-grep within file for actively used ports by process and port status
+grep within file for actively used ports by process and port status for "foreign" address (remote host ip and port)
 
-grep -i tcp systeminfo.txt | grep -v "tcp6\|127.0.0.1\|0.0.0.0\|::]\|over" | awk -F"[ /\\\[:]+" '{print $7,$8,$10}' | grep -w "8089\|8000\|8065\|8191\|9997\|8081\|9887\|8181\|8080\|8088" | sort -n | uniq -c | sed -e 's/^[ \t]*//' | column -t
+grep -i tcp systeminfo.txt | grep -v "tcp6\|127.0.0.1\|0.0.0.0\|::]\|over" | awk -F"[ /\\\[:]+" '{print $7,$8,$10}' | grep -w "8089\|8000\|8065\|8191\|9997\|8081\|9887\|8181\|8080\|8088" | sort -n | uniq -c
+
+
+
+
+
+
+
 
 
 
@@ -930,3 +943,31 @@ index=_internal source=*metrics.log* group=cachemgr_bucket
 
 more helpful grep for startup info (ulimits, thp, etc)
 egrep -a "(loader - Detected|Limiting REST|Limit: open|Limit: user|Limit: data segment|Linux transparent| My GUID)" splunkd.*
+
+
+
+
+
+
+
+
+
+
+index=<yourindex> case_number=<yourcasenumber> case_file=<diagname>
+earliest=03/15/2021:11:00:00 latest=03/15/2021:13:30:00
+sourcetype=splunkd
+| eval Status=
+case(like(_raw,"%Socket error%"),"socket",
+like(_raw,"%WARN  DistributedPeerManager - Cannot determine a latest common bundle%"), "bundle")
+| where isnotnull(Status)
+| timechart span=15m count by Status
+
+###after the second "like" statement, you can change out the message within the % symbols being searched to ERROR <somestringhere> or whatever you need
+
+
+
+
+
+searching for crashing threads in systeminfo.txt
+
+grep -ir "crashing thread" . | cut -d' ' -f1 --complement | sort -n | uniq -c
