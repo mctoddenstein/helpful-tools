@@ -1,0 +1,67 @@
+=======Environment Layout=======
+box01 - SHC
+box02 - SHC
+box03 - SHC
+box04 - Deployer
+box05 - IDXC
+box06 - IDXC
+box07 - IDXC
+box08 - CM
+box09 - LM, DS, DMC
+box10 - nix UF
+
+=======SHC info=======
+shcluster label = <shclusterLabel>
+p4SK = <yourP4SK>
+
+deployer
+[shclustering]
+pass4SymmKey= <yourP4SK>
+shcluster_label=shcluster
+
+=======IDXC info=======
+idxc label = idxcluster
+p4SK = <yourP4SK>
+
+=======Scrub old splunk install and user=======
+rm -rf /opt/splunk; rm -rf /home/splunk; userdel -rf splunk; cat /etc/passwd; cat /etc/shadow;
+
+=======wget package for all boxes (non-uf)=======
+for s in <host list>; do ssh -t root@$s "<insert wget command for version here>"; done
+
+=======install splunk on non-uf instances=======
+for s in <host list>; do ssh -t root@$s "rpm -Uvh <packagename>.rpm"
+
+=======start splunk and seed password=======
+for s in <host list>; do ssh -t root@$s "/opt/splunk*/bin/splunk start --accept-license --answer-yes --no-prompt --seed-passwd <seedPassword>"
+
+=======Chown all to Splunk=======
+for s in <host list>; do ssh -t root@$s "chown -R splunk:splunk /opt/splunk"; done
+
+=======SHCluster init=======
+splunk init shcluster-config -auth user:pass -mgmt_uri https://$s:<mgmtPort> -replication_port <repPort> -replication_factor <RF> -conf_deploy_fetch_url <deployerURI> -secret <SHC P4SK> -shcluster_label <shclusterLabel>
+
+for s in <SHCluster Peer URI's> ; do ssh -t root@$s "/opt/splunk/bin/splunk init shcluster-config -auth user:pass -mgmt_uri https://$s:<mgmtPort> -replication_port <repPort> -replication_factor <RF> -conf_deploy_fetch_url <deployerURI> -secret <SHC P4SK> -shcluster_label <shclusterLabel>"; done
+
+=======send script to SHC member and bootstrap cluster captain=======
+scp iamthecaptainnow.sh root@<initialSHCCaptain>:/
+
+ssh into listed box and run script
+
+=======Link SHCluster to IDXCluster=======
+for s in <SHC Peers>; do ssh -t root@$s "/opt/splunk/bin/ splunk edit cluster-config -mode searchhead -master_uri <CM URI:mgmtPort> -secret <IDXC P4SK> -auth user:pass"; done
+
+=======Restart Splunk instances=======
+for s in <shclusterPeers>; do ssh -t root@$s "/opt/splunk/bin/splunk restart"; done
+
+=======Stop splunk instances=======
+for s in <hostList>; do ssh -t root@$s "/opt/splunk*/bin/splunk restart"; done
+
+=======Use systemd to start splunk=======
+for s in <hostList>; do ssh -t root@$s "/opt/splunk*/bin/splunk enable boot-start -systemd-managed 1 -user splunk -group splunk -systemd-unit-file-name splunk"; done
+
+=======Batch Fix for Log4j Vuln=======
+for s in <hostList>; do ssh -t root@$s "rm -rf /opt/splunk/bin/jars/vendors/spark /opt/splunk/bin/jars/vendors/libs/splunk-library-javalogging-*.jar /opt/splunk/bin/jars/thirdparty/hive* /opt/splunk/etc/apps/splunk_archiver/java-bin/jars/*"; done
+
+Validate the removal of the files
+for s in <hostList>; do ssh -t root@$s "grep -ir /opt/splunk/bin/jars/vendors/spark /opt/splunk/bin/jars/vendors/libs/splunk-library-javalogging-*.jar /opt/splunk/bin/jars/thirdparty/hive* /opt/splunk/etc/apps/splunk_archiver/java-bin/jars/*"; done
