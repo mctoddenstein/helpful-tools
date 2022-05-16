@@ -396,9 +396,9 @@ In server.conf [clustering] change the following:
 cxn_timeout = 600 – Basic timeout value for establishing a connection between the cluster nodes
 send_timeout = 600 – Amount of time for a timeout with cluster nodes after a successful connection
 rcv_timeout = 600 – Timeout value for waiting for the data between cluster nodes
-heartbeat_period = 10 - Frequency(in secs) of heartbeat period with the cluster master
+heartbeat_period = 10 - Frequency(in secs) of heartbeat period with the cluster manager
 
-Cluster Master:
+Cluster Manager:
 
 In server.conf [clustering] change the following:
 heartbeat_timeout = 600 – Timeout value for when the CM determines when a cluster member is “down”
@@ -881,7 +881,7 @@ index=<customerindex> case_number=<casenumber> case_file=<diagname> sourcetype=s
 
 
 
-Cluster Master (CM) task priorities
+Cluster Manager (CM) task priorities
 
 Real time searches
 Initial Indexing (UDP>TCP>LOCAL)
@@ -910,7 +910,7 @@ openssl x509 -in certificate.crt -text -noout
 
 
 
-Smart Store Troubleshooting
+SmartStore Troubleshooting
 
 #download rate
 source=*metrics*  index=_internal
@@ -927,10 +927,25 @@ source=*metrics*  index=_internal group=cachemgr_download
 index=_internal   source=*/splunkd_access.log | rex field=uri "/services/admin/cacheman/bid|(?<bid>[^|]*)|/close" | search uri=*/close* | eval mytime=strftime(_time, "%Y-%m-%d %H:%M:%S") | stats last(_time) as _time count as buckets, sum(miss_ms) as miss_ms sum(search_ms) as search_ms, min(mytime) as issuetime by sid | fillnull value=0 search_ms | eval overheadRatio=(miss_ms/search_ms) | eval miss_ms_per_bucket=miss_ms/buckets | fillnull value=0 overheadRatio | eval searchSpeed=if(overheadRatio > 2,"slow","fast") | timechart count by searchSpeed
 
 4)age of bucket searches
+
+in cust environment:
+
 index=_audit source=*audit.log* action=remote_bucket_download
 info=completed
 |fields  local_dir kb elapsed_ms files cache_id host
 |rex field=local_dir "\/splunk\/(?<idx>[^\/]+)\/\w+\/db_(?<lt>[^_]+)_(?<et>[^_]+)_(?<seq>[^_]+)_(?<guid>[^\"]+)"
+| eval gbps=kb/1024/1024
+|eval age=round((_time-lt)/60/60/24)
+|bucket span=10 age
+|timechart minspan=10s sum(gbps) by age usenull=false limit=10
+
+
+in SB:
+append to initial search
+
+source=*audit.log* action=remote_bucket_download info=completed
+|fields  local_dir kb elapsed_ms files cache_id host
+|rex field=local_dir "\/opt\/splunk\/hot\/(?<idx>[^\/]+)\/\w+\/db_(?<lt>[^_]+)_(?<et>[^_]+)_(?<seq>[^_]+)_(?<guid>[^\"]+)"
 | eval gbps=kb/1024/1024
 |eval age=round((_time-lt)/60/60/24)
 |bucket span=10 age
@@ -971,3 +986,42 @@ like(_raw,"%WARN  DistributedPeerManager - Cannot determine a latest common bund
 searching for crashing threads in systeminfo.txt
 
 grep -ir "crashing thread" . | cut -d' ' -f1 --complement | sort -n | uniq -c
+
+
+Collect the search dispatch folders from both SH & Indexer.
+To enable the DEBUG logs we will need all channels and to turn this on for the search process please follow what is listed below.
+1. Add | noop log_DEBUG=* at the end of the search string and execute the search
+2. Look at the job inspector and find the "SID"
+3. Once the search finalizes, within 10 minutes, go to SH's $SPLUNK_HOME/var/run/splunk/dispatch/ folder and tar up the folder named "SID" from step 2 and collect that tar file.
+4. For one Indexer, go to same folder and find a folder remote_SHXX_SID and collect that directory and tar it up as well
+
+
+
+
+Identify Primary Buckets (replace bucket ID and "title" in line 3)
+
+| rest splunk_server=local /services/cluster/master/buckets/bcg~4788~0BD60D29-BBD6-4CED-A8D8-1FAA0FDB46DC
+       | rex field=title "^(?<repl_index>[^\~]+)"
+       | search title=bcg* repl_index="*" standalone=0 frozen=*
+       | rename title AS bucketID
+       | fields bucketID peers.*.search_state peers.*.bucket_flags frozen
+       | untable bucketID peerGUID value
+       | rex field=peerGUID "peers\.(?<peerGUID>[^\.]*?)\.(?:search_state|bucket_flags)"
+       | rex field=bucketID "^(?<IDX>[^~]+)~(?<localBid>[^~]+)~(?<SrcGUID>[^~]+)"
+       | eval bucket_frozen=if(peerGUID=="frozen" and value=="1",1,0)
+       | eval bucket_primary=if(value=="0xffffffffffffffff",1,0)
+       | eval bucket_searchable=if(value=="Searchable",1,0)
+       | eval bucket_unsearchable=if(value=="Unsearchable",1,0)
+       | eval peerGUID=if(peerGUID=="frozen", SrcGUID, peerGUID)
+       | join type=outer peerGUID [ rest splunk_server=local /services/cluster/master/peers
+          | fields active_* host* label title status
+          | eval PeerName=label + ":" + host_port_pair
+          | rename title AS peerGUID
+          | table peerGUID PeerName ]
+       | eval Peer=PeerName+":"+peerGUID
+       | eval Peer=if(isnull(Peer), peerGUID, Peer)
+       | stats sum(bucket_searchable) AS S sum(bucket_primary) AS P sum(bucket_unsearchable) AS US sum(bucket_frozen) AS F by bucketID Peer
+       | eval Peer=if(S==1, Peer+":"+ "S", Peer)
+       | eval Peer=if(P==1, Peer+":"+ "P", Peer)
+       | eval Peer=if(US==1, Peer+":"+ "US", Peer)
+   | stats values(Peer) AS PeerInfo dc(Peer) AS T_Bkts sum(S) AS S sum(US) AS US sum(P) AS Pri sum(F) AS Frzn by bucketID
